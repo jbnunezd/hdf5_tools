@@ -1,0 +1,199 @@
+#==================================================================================================#
+# CONFIGURATION
+#==================================================================================================#
+#
+#--------------------------------------------------------------------------------------------------#
+COMPILER=GNU
+MPI=T
+BUILD_HDF5=
+#--------------------------------------------------------------------------------------------------#
+#
+#--------------------------------------------------------------------------------------------------#
+ifeq ($(COMPILER),INTEL)
+  VN_COMPILER = INTEL
+else ifeq ($(COMPILER),INTEL_DEBUG)
+  VN_COMPILER = INTEL_DEBUG
+else ifeq ($(COMPILER),GNU)
+  VN_COMPILER = GNU
+else ifeq ($(COMPILER),GNU_DEBUG)
+  VN_COMPILER = GNU_DEBUG
+endif
+#--------------------------------------------------------------------------------------------------#
+#
+#
+#==================================================================================================#
+# PREPROCESSOR-DIRECTIVES                                                                          #
+#==================================================================================================#
+PREPROC  =-DPP_Equation=$(EQUATION)
+PREPROC +=-DPP_Problem=$(PROBLEM)
+PREPROC +=-DPP_nVar=$(NVAR)
+PREPROC +=-DPP_nDims=$(NDIMS)
+PREPROC +=-DPP_nElemsX=$(NELEMSX)
+PREPROC +=-DPP_nGhosts=$(NGHOSTS)
+PREPROC +=-DPP_nDerived=$(NDERIVED)
+#--------------------------------------------------------------------------------------------------#
+ifeq ($(findstring _,$(COMPILER)),_)
+  ONE=1
+  INDEX=`expr index "${COMPILER}" _`
+  INDEXM1=$(shell echo ${INDEX}-${ONE} | bc)
+  SHARECOMP_MOD=$(shell echo $(COMPILER) | cut -c 1-$(INDEXM1))
+else
+  SHARECOMP_MOD=$(COMPILER)
+endif
+#--------------------------------------------------------------------------------------------------#
+ifneq ($(MPI),)
+  PREPROC +=-DMPI
+  FC=$(FCM)
+  CC=$(CCM)
+  CXX=$(CXM)
+  SHARECOMP_MOD+=-MPI
+else
+  FC=$(FCS)
+  CC=$(CCS)
+  CXX=$(CXS)
+  SHARECOMP_MOD+=-SINGLE
+endif
+empty:=
+space:=$(empty) $(empty)
+SHARECOMP=$(subst $(space),$(empty),$(SHARECOMP_MOD))
+#--------------------------------------------------------------------------------------------------#
+#
+#
+#==================================================================================================#
+# LIBRARIES                                                                                        #
+#==================================================================================================#
+#
+#--------------------------------------------------------------------------------------------------#
+# BLAS / LAPACK
+#--------------------------------------------------------------------------------------------------#
+# # # # all these setup options assume a pre-installed library
+# # # ifneq ($(BLAS_LAPACK),)
+# # #   ifeq ($(findstring MKL,$(BLAS_LAPACK)),MKL)
+# # #     BLAS_LAPACK_INC  = -mkl=sequential
+# # #     BLAS_LAPACK_LIB  =
+# # #     BLAS_LAPACK_LIBS = -mkl=sequential
+# # #   else
+# # #     BLAS_LAPACK_INC  =
+# # #     BLAS_LAPACK_LIB  = -L$(BLAS_LAPACK)
+# # #     BLAS_LAPACK_LIBS = -llapack -lblas
+# # #   endif
+# # # endif
+#--------------------------------------------------------------------------------------------------#
+#
+#--------------------------------------------------------------------------------------------------#
+# HDF5                                                                                             #
+#--------------------------------------------------------------------------------------------------#
+ifeq ($(BUILD_HDF5),T)
+  HDF5_VERSION = 1.12.0
+  HDF5_MAJORVERSION=1
+  HDF5_MINORVERSION=12
+  HDF5_MICROVERSION=0
+  HDF5_BASE = ../ext/$(SHARECOMP)/hdf5-$(HDF5_VERSION)/hdf5
+
+  HDF5_LIB  = -L$(HDF5_BASE)/lib
+  HDF5_INC  = -I$(HDF5_BASE)/include
+  HDF5_LIBS = -lhdf5_fortran -lhdf5
+  HDF5_LIBS += -ldl -lz
+else
+  HDF5_LIB  = -L$(HDF5_DIR)/lib
+  HDF5_INC  = -I$(HDF5_DIR)/include
+  HDF5_LIBS = -lhdf5_fortran -lhdf5
+  HDF5_LIBS += -ldl -lz
+endif
+#--------------------------------------------------------------------------------------------------#
+#
+#==================================================================================================#
+# COMPILER                                                                                         #
+#==================================================================================================#
+ENVIRONMENT=$(COMPILER)
+AR         =ar
+AR_FLAGS   =clr
+#--------------------------------------------------------------------------------------------------#
+#
+#--------------------------------------------------------------------------------------------------#
+# INTEL
+#--------------------------------------------------------------------------------------------------#
+ifeq ($(findstring INTEL,$(ENVIRONMENT)),INTEL)
+  FCS=ifort
+  CCS=icc
+  CXS=icpc
+  FCM=mpiifort
+  CCM=mpiicc
+  CXM=mpiicpc
+  
+#   INSTRUCTION=-xHost
+  INSTRUCTION=-O3 -xCORE-AVX2 -ip
+  AR =xiar # required for compilation using -ipo and -fast
+  PREPROC +=-DINTEL
+
+  FPRE     =-P
+  PREOUT   =-o
+  FCFLAGS  =-fpp -allow nofpp_comments -assume bscc -r8 -i4 -traceback -warn all
+  FLFLAGS  =-r8 -i4 -traceback -assume bscc
+  F03STD   =-std03
+
+  ifeq ($(findstring DEBUG,$(ENVIRONMENT)),DEBUG)
+    FCFLAGS  +=-g -O0 -fpe0 -traceback
+    FCFLAGS  +=-check all,noarg_temp_created,noformat,nooutput_conversion,pointer,bounds,uninit
+    FCFLAGS  +=-init=snan -init=arrays
+    FLFLAGS  +=-g -O0
+  else
+    FCFLAGS  +=$(INSTRUCTION) #-no-prec-div -ipo -unroll-aggressive -p -pg
+    FLFLAGS  +=$(INSTRUCTION) #-no-prec-div -ipo -unroll-aggressive -p -pg
+  endif 
+
+  ifeq ($(findstring OMP,$(ENVIRONMENT)),OMP)
+    PREPROC += -DOMP
+    FCFLAGS += -openmp
+    OMP_LIB =  -openmp
+  endif
+endif
+#--------------------------------------------------------------------------------------------------#
+#
+#--------------------------------------------------------------------------------------------------#
+# GNU
+#--------------------------------------------------------------------------------------------------#
+ifeq ($(findstring GNU,$(ENVIRONMENT)),GNU)
+  FCS=gfortran
+  CCS=gcc
+  CXS=g++
+  FCM=mpif90
+  CCM=mpicc
+  CXM=mpicpc
+  
+  INSTRUCTION=-march=native
+  PREPROC +=-DGNU
+
+  FPRE     = -cpp -E -w
+  PREOUT   = >>
+  FCFLAGS  = -xf95-cpp-input -cpp -fdefault-real-8 -fdefault-double-8 -fbackslash -DGNU
+  FLFLAGS  = -fdefault-real-8 -fbackslash # don't change
+
+  ifeq ($(findstring DEBUG,$(ENVIRONMENT)),DEBUG)
+    FCFLAGS  += -g -O0 -ggdb3 -fbounds-check -finit-real=nan -fbacktrace
+    FLFLAGS  += -g -O0 -ggdb3 -fbounds-check -finit-real=nan -fbacktrace
+  else
+    FCFLAGS  += -O3 $(INSTRUCTION)
+    FLFLAGS  += -O3 $(INSTRUCTION)
+  endif
+
+  ifeq ($(findstring OMP,$(ENVIRONMENT)),OMP)
+    PREPROC += -DOMP
+    FCFLAGS += -fopenmp
+    FLFLAGS += -fopenmp
+  endif
+endif
+#--------------------------------------------------------------------------------------------------#
+#
+#
+#--------------------------------------------------------------------------------------------------#
+MAIN_LIB = libmain.a
+#--------------------------------------------------------------------------------------------------#
+LIBDIRS       = $(HDF5_LIB)
+INCDIRS       = $(HDF5_INC)
+EXTERNAL_LIBS = $(HDF5_LIBS)
+ALLLIBS       = $(LIBDIRS) $(EXTERNAL_LIBS)
+#--------------------------------------------------------------------------------------------------#
+FCFLAGS += $(PREPROC) -I.
+FLFLAGS += $(PREPROC)
+#--------------------------------------------------------------------------------------------------#
