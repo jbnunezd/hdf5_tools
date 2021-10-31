@@ -1,7 +1,7 @@
 !==================================================================================================!
 PROGRAM HDF5_TUTORIAL
 !--------------------------------------------------------------------------------------------------!
-#ifdef MPI
+#if MPI
 USE MPI_F08
 #endif
 !--------------------------------------------------------------------------------------------------!
@@ -17,7 +17,6 @@ INTEGER            :: nVar
 INTEGER            :: nDims
 INTEGER            :: nElemsX
 INTEGER            :: nElemsY
-REAL               :: tEnd
 REAL               :: MESH_X0(2)
 REAL               :: MESH_X1(2)
 REAL               :: MESH_DX(2)
@@ -35,23 +34,22 @@ INTEGER(HID_T)     :: file_id
 INTEGER(HID_T)     :: mygroup_id
 INTEGER            :: myrank
 INTEGER            :: mydims(3)
-INTEGER            :: iError
 !--------------------------------------------------------------------------------------------------!
-#ifdef MPI
+#if MPI
 INTEGER            :: iRank
 INTEGER            :: nProcs
 INTEGER            :: myComm
 LOGICAL            :: MPIROOT
 #endif
 !--------------------------------------------------------------------------------------------------!
-#ifdef MPI
+#if MPI
 INTEGER(HSIZE_T)   :: dimsf(3)
 INTEGER(HSIZE_T)   :: offset(3)
 #endif
 !--------------------------------------------------------------------------------------------------!
 
 ! Initialize MPI
-#ifdef MPI
+#if MPI
 CALL MPI_INIT(&
   ierror = iError)
 
@@ -124,7 +122,7 @@ END DO
 !--------------------------------------------------------------------------------------------------!
 filename = "Problem_Solution.h5"
 !--------------------------------------------------------------------------------------------------!
-#ifdef MPI
+#if MPI
 mycomm = MPI_COMM_WORLD%MPI_VAL
 CALL HDF5_OpenFile(file_id,filename,status="NEW",action="WRITE",comm=mycomm)
 #else
@@ -135,7 +133,7 @@ CALL HDF5_OpenFile(file_id,filename,status="NEW",action="WRITE")
 CALL HDF5_WriteDataSet(file_id,"CoordinateX",MeshNodes(1,:,1))
 CALL HDF5_WriteDataSet(file_id,"CoordinateY",MeshNodes(2,1,:))
 CALL HDF5_WriteDataSet(file_id,"Mesh",MeshNodes(:,:,:))
-#ifdef MPI
+#if MPI
 dimsf(1) = nVar
 dimsf(2) = nProcs*nElemsX
 dimsf(3) = nElemsY
@@ -166,7 +164,7 @@ CALL HDF5_ReadDataSet(file_id,"Solution",Uin(:,:,:))
 CALL HDF5_ReadAttribute(file_id,"","VarNames",VarNames2)
 CALL HDF5_CloseFile(file_id)
 
-#ifdef MPI
+#if MPI
 CALL MPI_FINALIZE(&
   ierror = iError)
 #endif
